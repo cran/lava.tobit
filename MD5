@@ -1,0 +1,16 @@
+262e9cad1e1e983018dfcb8e097ff09d *DESCRIPTION
+34d190c34d68f219d91dcb2368f85454 *NAMESPACE
+b03d66a4e7dc3ea0149d472a4120eb25 *R/binary.R
+af7098961ac1eb2cfcdd5c139b1cbcce *R/clprobit.R
+2c2cb2a0cd06f063723030788bd87f5c *R/hooks.R
+8914290be55d83bed8982941f521fd51 *R/onload.R
+65d66c27ac1c0a5041cd4ab02ebf703e *R/plotres.R
+83f4ca404b2b2c4ddd20c39a5bc771ed *R/rbind.Surv.R
+fc65d951c0c112865019eda60700ec75 *R/tobit.R
+777fcbd89ec81910e5f34e3038a16938 *R/weighted.R
+990356669005a3388f344753111a6241 *man/binary.Rd
+ed9e8f66dc746e038a388cc579bbfb03 *man/clprobit.Rd
+a83fd049f3c8eaef3817ccbb394fe50f *man/internal.Rd
+58cdf90b8b15d7959a99273408ff66db *man/lava.tobit.Rd
+553b198eb329b83384a620f98ff697ee *man/plotres.Rd
+e002ef5928a46d33fea1e0279a86e684 *man/rbind.Surv.Rd
