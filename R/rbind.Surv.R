@@ -19,7 +19,7 @@
 ##'rbind(S2,S2)
 ##'rbind(S3,S3)
 ##'
-##' @S3method rbind Surv
+##' @export
 rbind.Surv <- function(...) 
 {
   dots <- list(...)
@@ -35,3 +35,4 @@ rbind.Surv <- function(...)
   x <- c(x,list(type=type))
   do.call("Surv",x)
 } 
+

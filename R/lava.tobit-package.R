@@ -12,17 +12,19 @@
 ##' @aliases lava.tobit lava.tobit-package
 ##' @docType package
 ##' @author Klaus K. Holst Maintainer: <kkho@@biostat.ku.dk>
+##' @import lava mets mvtnorm survival
 ##' @keywords package
 ##' @examples
 ##' 
+##' library(lava.tobit)
 ##' m <- lvm(list(c(y,z) ~ x, y~z))
 ##' ## Simulate 200 observation from path analysis model
 ##' ## with all slopes and residual variances set to 1 and intercepts 0:
-##' d <- sim(m,200)
+##' d <- sim(m,200,seed=1)
 ##' ## Dichotomize y and introduce censoring on z
 ##' d <- transform(d, y=as.factor(y>0), z=Surv(z,z<2))
 ##' \donttest{
-##' e <- estimate(m,d,control=list(trace=1))
+##' e <- estimate(m,d,control=list(trace=1),estimator="gaussian")
 ##' effects(e,y~x)
 ##' }
 ##' 
@@ -31,11 +33,11 @@ NULL
 ##' For internal use
 ##'
 ##' @title For internal use
-##' @name lava.tobit.estimate.hook
+##' @name lava.tobit.init.hook
 ##' @rdname internal
 ##' @aliases tobit_gradient.lvm tobit_hessian.lvm tobit_logLik.lvm
 ##' tobit_method.lvm tobit_objective.lvm tobitw_gradient.lvm tobitw_hessian.lvm
-##' tobitw_method.lvm lava.tobit.color.hook lava.tobit.estimate.hook
+##' tobitw_method.lvm lava.tobit.color.hook
 ##' lava.tobit.init.hook lava.tobit.sim.hook
 ##' @author Klaus K. Holst
 ##' @keywords utilities

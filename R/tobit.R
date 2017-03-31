@@ -4,32 +4,31 @@
 tobit_method.lvm <- "nlminb1"
 
 ##' @export
-tobit_objective.lvm <- function(x,p,data,weight,indiv=FALSE,
-                                algorithm=lava.options()$tobitAlgorithm,
-                                seed=lava.options()$tobitseed,...) {
+tobit_objective.lvm <- function(x,p,data,weights,indiv=FALSE,
+                                algorithm=lava::lava.options()$tobitAlgorithm,
+                                seed=lava::lava.options()$tobitseed,...) {
   if (!is.null(seed)) {
-    if (!exists(".Random.seed")) runif(1)
+    if (!exists(".Random.seed")) stats::runif(1)
     save.seed <- .Random.seed
     set.seed(seed)
   }
-  require("mvtnorm")
-  zz <- manifest(x) 
+  
+  requireNamespace("mvtnorm")
+  zz <- lava::manifest(x) 
   d <- as.matrix(rbind(data)[,zz,drop=FALSE]);
   colnames(d) <- zz  
-  yy <- endogenous(x)
-  yy.w <- intersect(yy,colnames(weight))
+  yy <- lava::endogenous(x)
+  yy.w <- intersect(yy,colnames(weights))
   yy.idx <- match(yy.w,zz)
   Status <- matrix(0,ncol=length(zz),nrow=nrow(d))
-
-  Status[,yy.idx]<- as.matrix(weight)[,yy.w,drop=FALSE]
+  Status[,yy.idx]<- as.matrix(weights)[,yy.w,drop=FALSE]
   patterns <- unique(Status,MARGIN=1)
   cens.type <- apply(Status,1,
                      function(x) which(apply(patterns,1,function(y) identical(x,y))))  
-  mp <- modelVar(x,p,data=as.data.frame(d)) 
+  mp <- lava::modelVar(x,p,data=as.data.frame(d)) 
   Sigma <- mp$C ## Model specific covariance matrix
   xi <- mp$xi ## Model specific mean-vector
   val <- c()
-##  browser()
   for (i in 1:nrow(patterns)) {    
     ## Usual marginal likelihood for status==1
     pat <- patterns[i,]
@@ -45,13 +44,12 @@ tobit_objective.lvm <- function(x,p,data,weight,indiv=FALSE,
     right.cens.y <- zz[right.cens.idx] ##setdiff(zz,noncens.y)
     y <- d[idx,,drop=FALSE]
     val1 <- val0 <- 0;
-    ## browser()
     if (length(noncens.y)>0) {
       ## p(y), using: int[p(y,y*)]dy* =  p(y) int[p(y*|y)]dy*
-      val1 <- dmvnorm(d[idx,noncens.y,drop=FALSE], 
-                      mean=xi[noncens.idx],
-                      sigma=Sigma[noncens.idx,noncens.idx,drop=FALSE],
-                      log=TRUE)
+      val1 <- mvtnorm::dmvnorm(d[idx,noncens.y,drop=FALSE], 
+                              mean=xi[noncens.idx],
+                              sigma=Sigma[noncens.idx,noncens.idx,drop=FALSE],
+                              log=TRUE)
     }
 
     if (length(cens.idx)>0) {
@@ -59,25 +57,29 @@ tobit_objective.lvm <- function(x,p,data,weight,indiv=FALSE,
       L[cbind(cens.which.left,cens.which.left)] <- (-1)
       ##  L[cens.which.left,cens.which.left] <- (-1)
       if (length(noncens.y)==0) {
+        ##        suppressMessages(browser())
+          ##low <- L%*%t(d[idx,cens.idx,drop=FALSE])-as.numeric(L%*%xi)
+          ##lower=as.numeric(L%*%d[ii,cens.idx]),
         val0 <- sapply(idx,
                             function(ii)
-                            log(pmvnorm(lower=as.numeric(L%*%d[ii,cens.idx]),
-                                                     mean=as.numeric(L%*%xi),
-                                        sigma=L%*%Sigma%*%L,algorithm=algorithm)))
+                                log(mvtnorm::pmvnorm(lower=as.numeric(L%*%d[ii,cens.idx]),
+                                                     mean=as.numeric(L%*%as.vector(xi)),
+                                                     sigma=L%*%Sigma%*%L,algorithm=algorithm))
+                      )
+
       } else {
          M <- mom.cens(x,p,data=y,cens.idx,conditional=TRUE,deriv=FALSE)
          val0 <- c()
          for (j in 1:length(idx)) {           
-           val0 <- c(val0,log(pmvnorm(lower=as.numeric(L%*%y[j,cens.idx]),mean=as.numeric(L%*%M$mu.censIobs[j,]),sigma=L%*%M$S.censIobs%*%L,algorithm=algorithm)) )
+           val0 <- c(val0,log(mvtnorm::pmvnorm(lower=as.numeric(L%*%y[j,cens.idx]),mean=as.numeric(L%*%M$mu.censIobs[j,]),sigma=L%*%M$S.censIobs%*%L,algorithm=algorithm)) )
          }        
         }
-    }    
+    }
     val <- c(val,-val1-val0)
   }
   if (!is.null(seed))
     .Random.seed <<- save.seed
 
-  
   if (!indiv)
     return(sum(val))
   val
@@ -88,36 +90,44 @@ tobit_objective.lvm <- function(x,p,data,weight,indiv=FALSE,
 ###{{{ Gradient & Hessian
 
 ##' @export
-tobit_gradient.lvm <- function(x,p,data,weight,weight2=NULL,indiv=FALSE,
-                               algorithm=lava.options()$tobitAlgorithm,
-                               seed=lava.options()$tobitseed,...) {
+tobit_gradient.lvm <- function(x,p,data,weights,data2=NULL,indiv=FALSE,
+                               algorithm=lava::lava.options()$tobitAlgorithm,
+                               seed=lava::lava.options()$tobitseed,...) {
 
   if (!is.null(seed)) {
-    if (!exists(".Random.seed")) runif(1)
+    if (!exists(".Random.seed")) stats::runif(1)
     save.seed <- .Random.seed
     set.seed(seed)
   }
-  require("mvtnorm")
-  zz <- manifest(x)
+  requireNamespace("mvtnorm")
+  zz <- lava::manifest(x)
   d <- as.matrix(data[,zz,drop=FALSE]); colnames(d) <- zz
-  yy <- endogenous(x)
-  yy.w <- intersect(yy,colnames(weight))
+  yy <- lava::endogenous(x)
+  yy.w <- intersect(yy,colnames(weights))
   yy.idx <- match(yy.w,zz)
   Status <- matrix(0,ncol=length(zz),nrow=nrow(d))
-  Status[,yy.idx]<- as.matrix(weight)[,yy.w,drop=FALSE]
-
-  W0 <- weight2
+  Status[,yy.idx]<- as.matrix(weights)[,yy.w,drop=FALSE]
+  if (is.vector(data2)) data2 <- cbind(data2)
+  W0 <- data2
   if (!is.null(W0)) {
-    yy.w2 <- intersect(yy,colnames(weight2))
-    yy.idx2 <- match(yy.w2,zz)    
-    W0 <- matrix(1,ncol=length(zz),nrow=nrow(d))
-    W0[,yy.idx2] <- weight2[,yy.w2,drop=FALSE]
-    colnames(W0) <- zz
+      yy.w2 <- intersect(yy,colnames(data2))
+      yy.idx2 <- match(yy.w2,zz)
+      W0 <- matrix(1,ncol=length(zz),nrow=nrow(d))           
+      if (length(yy.idx2)==0) {
+          if (ncol(data2)==ncol(W0)) W0 <- data2
+          else {
+              for (i in seq(ncol(W0))) W0[,i] <- data2[,1]
+          }
+      } else {
+          W0[,yy.idx2] <- data2[,yy.w2,drop=FALSE]
+      }
+      colnames(W0) <- zz
   }
+
 ##  yy <- endogenous(x)
 ##  yy.idx <- match(yy,zz)
 ##  Status <- matrix(0,ncol=length(zz),nrow=nrow(d))
-##  Status[,yy.idx] <- as.matrix(weight)[,yy,drop=FALSE]
+##  Status[,yy.idx] <- as.matrix(weights)[,yy,drop=FALSE]
   patterns <- unique(Status,MARGIN=1)
   cens.type <- apply(Status,1,
                      function(x) which(apply(patterns,1,function(y) identical(x,y))))  
@@ -139,9 +149,8 @@ tobit_gradient.lvm <- function(x,p,data,weight,weight2=NULL,indiv=FALSE,
     right.cens.y <- zz[right.cens.idx] ##setdiff(zz,noncens.y)
     y <- d[idx,,drop=FALSE]
     w <- W0[idx,,drop=FALSE]
-    dummy <- cens.score(x,p,data=y,cens.idx=cens.idx,cens.which.left=cens.which.left, algorithm=algorithm,weight=w)
+    dummy <- cens.score(x,p,data=y,cens.idx=cens.idx,cens.which.left=cens.which.left, algorithm=algorithm,weights=w)
     score[idx,] <- dummy   
-    ##    browser()
     ##    y.pat <- unique(y,MARGIN=1)
     ##    system.time(
     ##    y.type <- apply(y,1,
@@ -153,7 +162,6 @@ tobit_gradient.lvm <- function(x,p,data,weight,weight2=NULL,indiv=FALSE,
     ##                      ))
     ##    score <- rbind(score,dummy[y.type,,drop=FALSE]) 
     ##    score <- rbind(0)
-    ##    browser()
     ##    dummy <- cens.score(x,p,data=y,cens.idx=cens.idx, cens.which.left=cens.which.left)
     ##    score <- rbind(score,dummy)
   }
@@ -166,8 +174,8 @@ tobit_gradient.lvm <- function(x,p,data,weight,weight2=NULL,indiv=FALSE,
 }
 
 ##' @export
-tobit_hessian.lvm <- function(x,p,data,weight,...) {
-  S <- -tobit_gradient.lvm(x,p=p,data=data,weight=weight,indiv=TRUE,...)
+tobit_hessian.lvm <- function(x,p,data,weights,...) {
+  S <- -tobit_gradient.lvm(x,p=p,data=data,weights=weights,indiv=TRUE,...)
   J <- t(S)%*%S
   attributes(J)$grad <- colSums(S)
   return(J)  
@@ -178,12 +186,12 @@ tobit_hessian.lvm <- function(x,p,data,weight,...) {
 ###{{{ Log-likelihood
 
 ##' @export
-tobit_logLik.lvm <- function(object,p,data,weight,...) {
-  res <- -tobit_objective.lvm(x=object,p=p,data=data,weight=weight,...)
+tobit_logLik.lvm <- function(object,p,data,weights,...) {
+  res <- -tobit_objective.lvm(x=object,p=p,data=data,weights=weights,...)
   args <- list(...)
-  args$object <- object; args$p <- p; args$data <- data; args$type <- "exo"; args$weight <- NULL
-  ##xl <- lava:::gaussian_logLik.lvm(object,p=p,data=data,type="exo",weight=NULL,...)
-  res <- res - do.call(gaussian_logLik.lvm,args)
+  args$object <- object; args$p <- p; args$data <- data; args$type <- "exo"; args$weights <- NULL
+  ##xl <- lava:::gaussian_logLik.lvm(object,p=p,data=data,type="exo",weights=NULL,...)
+  res <- res - do.call(lava::gaussian_logLik.lvm,args)
   return(res)
 }
 
@@ -191,19 +199,17 @@ tobit_logLik.lvm <- function(object,p,data,weight,...) {
 
 ###{{{ score for fixed censoring pattern
 
-cens.score <- function(x,p,data,cens.idx,cens.which.left,weight,...) {
+cens.score <- function(x,p,data,cens.idx,cens.which.left,weights,...) {
   obs.idx <- setdiff(1:NCOL(data),cens.idx)
   n <- NROW(data)
 ##  print(system.time(
   M <- mom.cens(x,p,data=data,cens.idx=cens.idx,conditional=TRUE,deriv=TRUE)
 ##))
   ## Censored part:
-##  browser()
   if (length(cens.idx)>0) {
 
     combcens <- 1*(length(cens.which.left)>0) +
       -1*(length(cens.which.left)<length(cens.idx))
-##    browser()
     ## 0: left and right, -1: left only, 1: right only
  
 ##     mu <- M$mu.cens
@@ -233,8 +239,8 @@ cens.score <- function(x,p,data,cens.idx,cens.which.left,weight,...) {
         dmu <- L%*%dmu
       }
       zi <- z[i,]
-      if (!is.null(weight))
-        w <- diag(weight[i,cens.idx],nrow=length(cens.idx))
+      if (!is.null(weights))
+        w <- diag(weights[i,cens.idx],nrow=length(cens.idx))
       if (combcens==-1) {
         zi <- -zi
         mu <- -mu
@@ -253,7 +259,7 @@ cens.score <- function(x,p,data,cens.idx,cens.which.left,weight,...) {
                             dS=dS,
                             ##                            dmu=L%*%matrix(M$dmu.censIobs[,,i],nrow=length(cens.idx)),
                             dmu=dmu,
-                            weight=w,
+                            weights=w,
                             ...)
       alpha <- attributes(DCDF)$cdf
       DCDFs <- rbind(DCDFs, 1/alpha*DCDF)
@@ -271,7 +277,7 @@ cens.score <- function(x,p,data,cens.idx,cens.which.left,weight,...) {
     if (n==1) y. <- y1 else y. <- colMeans(y1)
     mu <- M$mu.obs
     S <- M$S.obs
-    iS <- Inverse(S)
+    iS <- lava::Inverse(S)
     dS <- M$dS.obs
     dmu <- M$dmu.obs
     S1 <- c()
@@ -279,16 +285,15 @@ cens.score <- function(x,p,data,cens.idx,cens.which.left,weight,...) {
     for (i in 1:n) {
       z <- as.numeric(y1[i,])
       u <- z-mu
-##      browser()
-      if (!is.null(weight)) {
-        W <- diag(weight[i,obs.idx],nrow=length(obs.idx))
+      if (!is.null(weights)) {
+        W <- diag(weights[i,obs.idx],nrow=length(obs.idx))
         S1 <- rbind(S1,
                     as.numeric(crossprod(W%*%u,iS)%*%dmu -
                                1/2*as.vector((iS-iS%*%tcrossprod(u)%*%iS)%*%W)%*%dS))
       } else {      
         S1 <- rbind(S1,
-                    as.numeric(part0 + crossprod(u,iS)%*%dmu +
-                               1/2*as.vector(iS%*%tcrossprod(u)%*%iS)%*%dS))
+                    as.numeric(part0 + crossprod(as.vector(u),iS)%*%dmu +
+                               1/2*as.vector(iS%*%tcrossprod(as.vector(u))%*%iS)%*%dS))
       }
     }
   } else S1 <- 0
@@ -306,16 +311,16 @@ cens.score <- function(x,p,data,cens.idx,cens.which.left,weight,...) {
 ###{{{ Derivatives of normal CDF
 
 ## Calculates first and second order partial derivatives of normal CDF
-Dpmvnorm <- function(Y,S,mu=rep(0,NROW(S)),std=FALSE,seed=lava.options()$tobitseed,
-                     algorithm=lava.options()$tobitAlgorithm,
-                     ...) {
-##  browser()
+Dpmvnorm <- function(Y,S,mu=rep(0,NROW(S)),std=FALSE,
+             seed=lava::lava.options()$tobitseed,
+             algorithm=lava::lava.options()$tobitAlgorithm, ...) {
   k <- NROW(S)
   if (!is.null(seed) & k>1) {
-    if (!exists(".Random.seed")) runif(1)
+    if (!exists(".Random.seed")) stats::runif(1)
     save.seed <- .Random.seed
   }
-  require("mvtnorm")
+  requireNamespace("mvtnorm")
+
   if (!std) {
     L <- diag(S)^0.5
     Li <- diag(1/L,NROW(S))
@@ -329,7 +334,7 @@ Dpmvnorm <- function(Y,S,mu=rep(0,NROW(S)),std=FALSE,seed=lava.options()$tobitse
   Y <- as.vector(Y)
   
   if (k==1) {
-    D <- dnorm(Y,sd=as.vector(S)^0.5)
+    D <- stats::dnorm(Y,sd=as.vector(S)^0.5)
     H <- -Y*D
     return(list(grad=D,hessian=H))
   }
@@ -339,35 +344,35 @@ Dpmvnorm <- function(Y,S,mu=rep(0,NROW(S)),std=FALSE,seed=lava.options()$tobitse
 ##    tcrossprod(S[-j,j,drop=FALSE])
     Sj <- S[-j,-j,drop=FALSE] - tcrossprod(S[-j,j,drop=FALSE]) ##/S[j,j] S=correlation
     muj <- Y[-j] - S[-j,j,drop=FALSE]*Y[j]
-#    set.seed(seed)
-    D[j] <- dnorm(Y[j])*pmvnorm(upper=as.vector(muj),sigma=Sj,algorithm=algorithm)
+                                        #    set.seed(seed)
+    D[j] <- stats::dnorm(Y[j])*mvtnorm::pmvnorm(upper=as.vector(muj),sigma=Sj,algorithm=algorithm)
   }
+
+  
   H <- matrix(0,k,k) 
   if (k<3) {
-    H[1,2] <- H[2,1] <- dmvnorm(unlist(Y),sigma=S)
+    H[1,2] <- H[2,1] <- mvtnorm::dmvnorm(unlist(Y),sigma=S)
     diag(H) <- -Y*D -H[1,2]*S[1,2]
     ##as.vector((H*S)%*%rep(1,k))
   } else {
-    ##    H[] <- 0
     phis <- Phis <- H
     for (i in 1:(k-1)) {
       for (j in (i+1):k) {
         Snij <- S[-c(i,j),c(i,j),drop=FALSE]
-        B <- Snij%*%Inverse(S[c(i,j),c(i,j)])
+        B <- Snij%*%lava::Inverse(S[c(i,j),c(i,j)])
         Sij <- S[-c(i,j),-c(i,j),drop=FALSE] - B%*%t(Snij)
         muij <- Y[-c(i,j)] - B%*%Y[c(i,j)]
-#        set.seed(seed)
-        Phis[i,j] <- Phis[j,i] <- pmvnorm(upper=as.vector(muij),sigma=Sij,algorithm=algorithm)
-        phis[i,j] <- phis[j,i] <- dmvnorm(Y[c(i,j)],sigma=S[c(i,j),c(i,j)])
+        Phis[i,j] <- Phis[j,i] <- mvtnorm::pmvnorm(upper=as.vector(muij),sigma=Sij,algorithm=algorithm)
+        phis[i,j] <- phis[j,i] <- mvtnorm::dmvnorm(Y[c(i,j)],sigma=S[c(i,j),c(i,j)])
       }
     }
     H <- Phis*phis
-    diag(H) <- -Y*D - as.vector((S*H)%*%rep(1,k))    
+    diag(H) <- -Y*D - as.vector((S*H)%*%rep(1,k))
   }
   if (!std) {
     if (!is.null(seed))
       .Random.seed <<- save.seed
-    a <- pmvnorm(upper=Y,mean=as.numeric(mu),sigma=S,algorithm=algorithm)
+    a <- mvtnorm::pmvnorm(upper=Y,mean=as.numeric(mu),sigma=S,algorithm=algorithm)
     return(list(grad=Li%*%D, hessian=Li%*%H%*%Li, R=S, CDF=a, S=S0, mu=mu, L=L, Li=Li))
   }
   if (!is.null(seed))
@@ -377,11 +382,12 @@ Dpmvnorm <- function(Y,S,mu=rep(0,NROW(S)),std=FALSE,seed=lava.options()$tobitse
 
 ## Calculates first and second order partial derivatives of normal CDF
 ## w.r.t. parameter-vector!
-Dthetapmvnorm <- function(yy,mu,S,dmu,dS,seed=lava.options()$tobitseed,
-                          algorithm=lava.options()$tobitAlgorithm, weight,
-                          ...) {
+Dthetapmvnorm <- function(yy,mu,S,dmu,dS,
+                  seed=lava::lava.options()$tobitseed,
+                  algorithm=lava::lava.options()$tobitAlgorithm, weights,
+                  ...) {
   if (!is.null(seed)) {
-    if (!exists(".Random.seed")) runif(1)
+    if (!exists(".Random.seed")) stats::runif(1)
     save.seed <- .Random.seed
   }
   ##yy <- as.matrix(yy)
@@ -389,17 +395,17 @@ Dthetapmvnorm <- function(yy,mu,S,dmu,dS,seed=lava.options()$tobitseed,
   ##  M <- moments(x,p)
   ##  mu <- M$xi
   ##  S <- M$C
-  iS <- Inverse(S)  
+  iS <- lava::Inverse(S)  
   ##  DCDF <- Dpmvnorm(y,S,mu)
   L <- diag(S)^0.5
   Li <- diag(1/L,NROW(S))
   L <- diag(L,NROW(S))
   R <- Li%*%S%*%Li
   LR <- L%*%R ## = S%*%Li
-  if (!is.null(weight)) {    
-    K1 <- -0.5*t(dS)%*%cbind(as.vector(iS%*%weight))
+  if (!is.null(weights)) {    
+    K1 <- -0.5*t(dS)%*%cbind(as.vector(iS%*%weights))
     K2 <- 0.5*t(dS)%*%(iS%x%iS)
-    K3 <- t(dmu)%*%(iS%*%weight)
+    K3 <- t(dmu)%*%(iS%*%weights)
   } else {
     K1 <- -0.5*t(dS)%*%cbind(as.vector(iS))
     K2 <- 0.5*t(dS)%*%(iS%x%iS)
@@ -408,15 +414,15 @@ Dthetapmvnorm <- function(yy,mu,S,dmu,dS,seed=lava.options()$tobitseed,
   S0 <- function(y) {
     z <- Li%*%(y-mu)
 #    set.seed(seed)
-    a <- pmvnorm(upper=y,mean=as.numeric(mu),sigma=S,algorithm=algorithm)
+    a <- mvtnorm::pmvnorm(upper=y,mean=as.numeric(mu),sigma=S,algorithm=algorithm)
     DC <- Dpmvnorm(z,R,std=TRUE,algorithm=algorithm)
     MM <- -LR%*%(DC$grad)
     VV <- LR%*%(DC$hessian)%*%t(LR) + a*S
 ##    message("DC")
 ##    print(DC$hessian)
     part1 <- K1*a
-    if (!is.null(weight)) {
-      VV <- VV%*%weight
+    if (!is.null(weights)) {
+      VV <- VV%*%weights
     }
     part2 <- K2%*%as.vector(VV)
     part3 <- K3%*%as.vector(MM)
@@ -439,10 +445,9 @@ Dthetapmvnorm <- function(yy,mu,S,dmu,dS,seed=lava.options()$tobitseed,
 
 mom.cens <- function(x,p,cens.idx,data,deriv=TRUE,conditional=TRUE,right=TRUE,...) {
   obs.idx <- setdiff(1:NCOL(data),cens.idx)
-##  browser()
-  M <- moments(x,p,data=as.data.frame(data))
+  M <- lava::moments(x,p,data=as.data.frame(data))
   if (deriv)
-    D <- deriv(x,p=p,mom=M,meanpar=TRUE) ##,mu=colMeans(data))
+    D <- stats::deriv(x,p=p,mom=M,meanpar=TRUE) ##,mu=colMeans(data))
 
   if (length(cens.idx)<1) {
     res <- list(S.obs=M$C, mu.obs=M$xi, S.cens=NULL, mu.cens=NULL,
@@ -469,7 +474,7 @@ mom.cens <- function(x,p,cens.idx,data,deriv=TRUE,conditional=TRUE,right=TRUE,..
   S.obscens <- M$C[obs.idx,cens.idx,drop=FALSE]
   mu.obs <- M$xi[obs.idx]
   mu.cens <- M$xi[cens.idx]
-  iS.obs <- Inverse(S.obs)
+  iS.obs <- lava::Inverse(S.obs)
 
   S01iS0 <- S.censobs%*%iS.obs
   S.cond <- S.cens - S01iS0%*%S.obscens

@@ -28,7 +28,7 @@
 ##' @export
 "binary<-" <- function(x,...,value) UseMethod("binary<-")
 
-##' @S3method binary<- lvm
+##' @export
 "binary<-.lvm" <- function(x,...,value) {
   if (class(value)[1]=="formula") {
     return(binary(x,all.vars(value),...))
@@ -36,7 +36,7 @@
   binary(x, value, ...)
 }
 
-##' @S3method binary lvm
+##' @export
 `binary.lvm` <-
 function(x,var=NULL, ...) {
   if (is.null(var)) {
@@ -53,10 +53,11 @@ function(x,var=NULL, ...) {
   
   ##  x <- addattr(x,attr="shape",var=var,val="box")
   x$attributes$binary[var] <- TRUE
+  x$attributes$type[var] <- "Binary"
   x$attributes$normal[var] <- FALSE
   ## nodeData(Graph(x), var, attr="binary") <- TRUE
   ## nodeData(Graph(x), var, attr="normal") <- FALSE
-  covfix(x,var,NULL) <- 1
+  lava::covfix(x,var,NULL) <- 1
   ##  distribution(x, var) <- probit.lvm
   return(x)
 }
